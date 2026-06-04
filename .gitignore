@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Generated knowledge base output (user data)
+output/obsidian_vault/
+output/chroma_db/
