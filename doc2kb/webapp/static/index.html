@@ -48,15 +48,21 @@
 
       <!-- Directory tab -->
       <div class="tab-panel" id="tab-dir">
-        <label>Server-side directory path (absolute)</label>
-        <input type="text" id="dir-input" placeholder="C:\Documenti\Progetti" />
+        <label>Select a folder to ingest</label>
+        <div class="drop-zone" id="dir-drop-zone" onclick="document.getElementById('dir-input').click()">
+          <input type="file" id="dir-input" webkitdirectory multiple
+                 accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
+          <div class="drop-icon">📁</div>
+          <p>Click to choose a folder</p>
+          <div class="file-name" id="dir-folder-name"></div>
+        </div>
         <label>OCR Languages (comma-separated, e.g. it,en)</label>
         <input type="text" id="dir-langs" value="en" placeholder="en" />
         <label class="check-label">
           <input type="checkbox" id="dir-force" />
           Force re-ingest even if already indexed
         </label>
-        <button id="dir-btn" onclick="ingestDir()">Ingest Directory</button>
+        <button id="dir-btn" onclick="ingestDir()" disabled>Ingest Directory</button>
         <div class="status" id="dir-status"></div>
         <div id="dir-results"></div>
       </div>

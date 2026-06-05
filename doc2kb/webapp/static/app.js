@@ -126,56 +126,100 @@ async function ingestFile() {
 }
 
 // ── Ingest Directory ──────────────────────────────────────────────────────────
+const dirInput = document.getElementById('dir-input');
+const dirFolderName = document.getElementById('dir-folder-name');
+const dirBtn = document.getElementById('dir-btn');
+
+const SUPPORTED_EXTS = new Set([
+  '.pdf','.docx','.doc','.pptx','.ppt',
+  '.txt','.md','.html','.htm',
+  '.jpg','.jpeg','.png','.tiff','.tif','.bmp','.gif','.webp',
+]);
+
+dirInput.addEventListener('change', () => {
+  const files = [...dirInput.files].filter(f => {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    return SUPPORTED_EXTS.has(ext);
+  });
+  if (files.length) {
+    // Derive folder name from the first file's relative path
+    const folderName = dirInput.files[0].webkitRelativePath.split('/')[0];
+    dirFolderName.textContent = `📁 ${folderName} — ${files.length} supported file(s)`;
+    dirBtn.disabled = false;
+  } else {
+    dirFolderName.textContent = 'No supported files found in this folder.';
+    dirBtn.disabled = true;
+  }
+});
+
 async function ingestDir() {
-  const directory = document.getElementById('dir-input').value.trim();
-  if (!directory) return setStatus('dir-status', 'Please enter a directory path.', 'err');
+  const allFiles = [...dirInput.files].filter(f => {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    return SUPPORTED_EXTS.has(ext);
+  });
+  if (!allFiles.length) return setStatus('dir-status', 'Please select a folder first.', 'err');
 
   const langs = document.getElementById('dir-langs').value
-    .split(',').map(s => s.trim()).filter(Boolean);
+    .split(',').map(s => s.trim()).filter(Boolean).join(',') || 'en';
   const force = document.getElementById('dir-force').checked;
 
   setLoading('dir-btn', true);
-  setStatus('dir-status', '<span class="spinner"></span> Scanning and ingesting…', 'info show');
   document.getElementById('dir-results').innerHTML = '';
 
-  try {
-    const res = await fetch('/api/ingest/dir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ directory, force, langs }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || res.statusText);
+  let ok = 0, skipped = 0, errors = 0;
+  const rows = [];
 
-    if (data.status === 'empty') {
-      setStatus('dir-status', '⚠️ No supported files found in that directory.', 'info');
-    } else {
-      setStatus('dir-status',
-        `✅ Done — ${data.indexed} indexed, ${data.skipped} skipped, ${data.errors} errors (${data.total} total)`,
-        data.errors ? 'info' : 'ok');
+  for (let i = 0; i < allFiles.length; i++) {
+    const file = allFiles[i];
+    const relPath = file.webkitRelativePath || file.name;
+    setStatus('dir-status',
+      `<span class="spinner"></span> Processing ${i + 1}/${allFiles.length}: ${escHtml(relPath)}`,
+      'info show');
 
-      // Detail table
-      const rows = data.details.map(r => {
-        const name = r.file.replace(/.*[\\/]/, '');
-        const icon = r.status === 'ok' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
-        const detail = r.status === 'ok' ? `${r.chunks} chunks`
-                     : r.status === 'skipped' ? 'already indexed'
-                     : escHtml(r.message || '');
-        return `<tr><td>${icon}</td><td title="${escHtml(r.file)}">${escHtml(name)}</td><td>${detail}</td></tr>`;
-      }).join('');
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    fd.append('force', force);
+    fd.append('langs', langs);
 
-      document.getElementById('dir-results').innerHTML = `
-        <table class="doc-table" style="margin-top:12px;">
-          <thead><tr><th></th><th>File</th><th>Result</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+    try {
+      const res = await fetch('/api/ingest/file', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.statusText);
+
+      if (data.status === 'skipped') {
+        skipped++;
+        rows.push({ path: relPath, icon: '⏭️', detail: 'already indexed' });
+      } else {
+        ok++;
+        rows.push({ path: relPath, icon: '✅', detail: `${data.chunks} chunks` });
+      }
+    } catch (err) {
+      errors++;
+      rows.push({ path: relPath, icon: '❌', detail: err.message });
     }
-    loadDocuments();
-  } catch (err) {
-    setStatus('dir-status', `❌ ${err.message}`, 'err');
-  } finally {
-    setLoading('dir-btn', false);
   }
+
+  setStatus('dir-status',
+    `✅ Done — ${ok} indexed, ${skipped} skipped, ${errors} errors (${allFiles.length} total)`,
+    errors ? 'info' : 'ok');
+
+  document.getElementById('dir-results').innerHTML = `
+    <table class="doc-table" style="margin-top:12px;">
+      <thead><tr><th></th><th>File</th><th>Result</th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr>
+          <td>${r.icon}</td>
+          <td title="${escHtml(r.path)}">${escHtml(r.path.split('/').pop())}</td>
+          <td>${escHtml(r.detail)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  dirFolderName.textContent = '';
+  dirInput.value = '';
+  dirBtn.disabled = true;
+  setLoading('dir-btn', false);
+  loadDocuments();
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
