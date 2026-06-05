@@ -19,7 +19,7 @@ CHROMA_DIR = OUTPUT_DIR / "chroma_db"
 COLLECTION_NAME = "knowledge_base"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 
-ANTHROPIC_OCR_MODEL = "claude-3-5-haiku-20241022"
+ANTHROPIC_OCR_MODEL = "claude-haiku-4-5"
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
