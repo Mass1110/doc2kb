@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "doc2kb"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10"
 dependencies = [
     "trafilatura>=1.12",
+    "pymupdf>=1.27",
     "pymupdf4llm>=0.0.17",
     "mammoth>=1.8",
     "python-pptx>=1.0",
@@ -20,17 +21,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Handwriting OCR (local TrOCR model)
-ocr = [
-    "transformers>=4.40",
-    "torch>=2.0",
-]
-# Cloud OCR fallback
-cloud = [
-    "transformers>=4.40",
-    "torch>=2.0",
-    "google-cloud-vision>=3.7",
-]
+# Local handwriting OCR (80+ languages via EasyOCR)
+ocr = ["easyocr>=1.7"]
+# Local OCR + Google Vision cloud fallback
+cloud = ["easyocr>=1.7", "google-cloud-vision>=3.7"]
+# Web frontend
+web = ["fastapi>=0.111", "uvicorn>=0.30", "python-multipart>=0.0.9"]
+# Everything
+all = ["easyocr>=1.7", "google-cloud-vision>=3.7", "fastapi>=0.111", "uvicorn>=0.30", "python-multipart>=0.0.9"]
 
 [project.scripts]
 doc2kb = "doc2kb.cli:cli"

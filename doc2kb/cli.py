@@ -1,16 +1,16 @@
-"""doc2kb CLI — ingest, query, list, index."""
+"""doc2kb CLI — ingest, query, list, index, delete, serve."""
 from __future__ import annotations
 
-import sys
+import hashlib
 from pathlib import Path
 
 import click
 
 from .config import CHUNK_SIZE, CHUNK_OVERLAP
 from .ingestion import ingest
-from .markdown_writer import save_note, regenerate_index
+from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
-from .store import add_chunks, doc_exists, query as kb_query, list_documents
+from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
 
 
 @click.group()
@@ -18,13 +18,20 @@ def cli() -> None:
     """doc2kb: ingest documents into an Obsidian vault + ChromaDB knowledge base."""
 
 
-@cli.command()
+@cli.command("ingest")
 @click.argument("source")
 @click.option("--force", is_flag=True, help="Re-ingest even if already indexed.")
 @click.option("--batch", is_flag=True, help="Treat SOURCE as a file of sources (one per line).")
-def ingest_cmd(source: str, force: bool, batch: bool) -> None:
+@click.option(
+    "--lang",
+    multiple=True,
+    default=["en"],
+    show_default=True,
+    help="OCR language code(s) for image files (EasyOCR). E.g. --lang it --lang en",
+)
+def ingest_cmd(source: str, force: bool, batch: bool, lang: tuple[str, ...]) -> None:
     """Ingest a URL, local file, or batch file into the knowledge base."""
-    sources = []
+    langs = list(lang)
     if batch:
         sources = [
             line.strip()
@@ -35,15 +42,16 @@ def ingest_cmd(source: str, force: bool, batch: bool) -> None:
         sources = [source]
 
     for src in sources:
-        _do_ingest(src, force)
+        _do_ingest(src, force, langs)
 
 
-def _do_ingest(source: str, force: bool) -> None:
-    import hashlib
-
-    # Compute doc_id upfront to check deduplication
+def _doc_id_for(source: str) -> str:
     key = source if source.startswith("http") else str(Path(source).resolve())
-    doc_id = "sha256-" + hashlib.sha256(key.encode()).hexdigest()[:16]
+    return "sha256-" + hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def _do_ingest(source: str, force: bool, langs: list[str] | None = None) -> None:
+    doc_id = _doc_id_for(source)
 
     if not force and doc_exists(doc_id):
         click.echo(f"[skip] Already indexed: {source}  (use --force to re-ingest)")
@@ -51,7 +59,7 @@ def _do_ingest(source: str, force: bool) -> None:
 
     click.echo(f"[ingest] {source}")
     try:
-        content, metadata = ingest(source)
+        content, metadata = ingest(source, langs=langs)
     except Exception as exc:
         click.echo(f"[error] {exc}", err=True)
         return
@@ -94,10 +102,42 @@ def list_cmd() -> None:
     if not docs:
         click.echo("Knowledge base is empty.")
         return
-    click.echo(f"{'TYPE':<12} {'TITLE':<40} SOURCE")
-    click.echo("-" * 90)
+    click.echo(f"{'TYPE':<12} {'DOC_ID':<22} {'TITLE':<36} SOURCE")
+    click.echo("-" * 100)
     for doc in sorted(docs, key=lambda d: d["type"]):
-        click.echo(f"{doc['type']:<12} {doc['title'][:38]:<40} {doc['source'][:60]}")
+        click.echo(
+            f"{doc['type']:<12} {doc['doc_id']:<22} "
+            f"{doc['title'][:34]:<36} {doc['source'][:50]}"
+        )
+
+
+@cli.command("delete")
+@click.argument("source", required=False)
+@click.option("--doc-id", "doc_id", default=None, help="Delete by explicit doc_id.")
+def delete_cmd(source: str | None, doc_id: str | None) -> None:
+    """Remove a document from the knowledge base (ChromaDB + Obsidian vault).
+
+    Pass the same SOURCE used during ingestion, or use --doc-id.
+    """
+    if not source and not doc_id:
+        raise click.UsageError("Provide SOURCE or --doc-id.")
+
+    target_id = doc_id if doc_id else _doc_id_for(source)
+
+    chunks_removed = delete_doc(target_id)
+    if chunks_removed == 0:
+        click.echo(f"[warn] No chunks found for doc_id={target_id}")
+    else:
+        click.echo(f"  → {chunks_removed} chunk(s) removed from ChromaDB")
+
+    note_path = delete_note(target_id)
+    if note_path:
+        click.echo(f"  → note deleted: {note_path}")
+    else:
+        click.echo("  [warn] No vault note found for this document.")
+
+    regenerate_index()
+    click.echo("  → _INDEX.md regenerated")
 
 
 @cli.command("index")
@@ -107,8 +147,21 @@ def index_cmd() -> None:
     click.echo(f"Index written: {path}")
 
 
-# Allow `doc2kb ingest` as an alias for the ingest subcommand
-cli.add_command(ingest_cmd, name="ingest")
+@cli.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Bind host.")
+@click.option("--port", default=8000, show_default=True, type=int, help="Bind port.")
+def serve_cmd(host: str, port: int) -> None:
+    """Start the doc2kb web frontend."""
+    try:
+        import uvicorn
+    except ImportError:
+        raise click.ClickException(
+            "Web dependencies not installed. Run: pip install -e \".[web]\""
+        )
+    from .webapp.app import app
+
+    click.echo(f"Starting doc2kb web UI at http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

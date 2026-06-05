@@ -55,6 +55,16 @@ def query(text: str, n_results: int = 5) -> list[dict]:
     return hits
 
 
+def delete_doc(doc_id: str) -> int:
+    """Remove all chunks for *doc_id*. Returns the number of chunks deleted."""
+    col = _collection()
+    results = col.get(where={"doc_id": doc_id})
+    ids = results["ids"]
+    if ids:
+        col.delete(ids=ids)
+    return len(ids)
+
+
 def list_documents() -> list[dict]:
     col = _collection()
     all_meta = col.get(include=["metadatas"])["metadatas"]

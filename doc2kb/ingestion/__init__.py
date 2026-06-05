@@ -12,8 +12,11 @@ from .handwriting import ingest_handwriting
 from ..config import IMAGE_EXTENSIONS
 
 
-def ingest(source: str) -> tuple[str, dict]:
-    """Return (markdown_content, metadata) for *source*."""
+def ingest(source: str, langs: list[str] | None = None) -> tuple[str, dict]:
+    """Return (markdown_content, metadata) for *source*.
+
+    *langs* is only used for image/handwriting sources (EasyOCR language codes).
+    """
     if source.startswith("http://") or source.startswith("https://"):
         return ingest_web(source)
 
@@ -30,6 +33,6 @@ def ingest(source: str) -> tuple[str, dict]:
     if suffix in (".pptx", ".ppt"):
         return ingest_pptx(path)
     if suffix in IMAGE_EXTENSIONS:
-        return ingest_handwriting(path)
+        return ingest_handwriting(path, langs=langs)
     # fallback: plain text / HTML
     return ingest_text(path)

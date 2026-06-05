@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>doc2kb</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<header>
+  <h1><span class="logo">📚</span> doc2kb</h1>
+  <div class="header-right">
+    <span class="badge" id="doc-count">0 documents</span>
+    <button onclick="rebuildIndex()" style="width:auto;margin:0;padding:6px 14px;font-size:12px;">
+      Rebuild Index
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT COLUMN: Ingest -->
+  <div>
+    <div class="card">
+      <div class="card-header">⬆️ Ingest</div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="url">URL</div>
+        <div class="tab" data-tab="file">File Upload</div>
+      </div>
+
+      <!-- URL tab -->
+      <div class="tab-panel active" id="tab-url">
+        <label>URL to ingest</label>
+        <input type="url" id="url-input" placeholder="https://example.com/article" />
+        <label>OCR Languages (comma-separated, e.g. it,en)</label>
+        <input type="text" id="url-langs" value="en" placeholder="en" />
+        <label class="check-label">
+          <input type="checkbox" id="url-force" />
+          Force re-ingest even if already indexed
+        </label>
+        <button id="url-btn" onclick="ingestUrl()">Ingest URL</button>
+        <div class="status" id="url-status"></div>
+      </div>
+
+      <!-- File tab -->
+      <div class="tab-panel" id="tab-file">
+        <label>Drop a file or click to browse</label>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".pdf,.docx,.pptx,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
+          <div class="drop-icon">📂</div>
+          <p>PDF, DOCX, PPTX, TXT, HTML, images</p>
+          <div class="file-name" id="file-name"></div>
+        </div>
+        <label>OCR Languages (for images, comma-separated)</label>
+        <input type="text" id="file-langs" value="en" placeholder="en" />
+        <label class="check-label">
+          <input type="checkbox" id="file-force" />
+          Force re-ingest even if already indexed
+        </label>
+        <button id="file-btn" onclick="ingestFile()">Ingest File</button>
+        <div class="status" id="file-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="right-col">
+
+    <!-- Search -->
+    <div class="card">
+      <div class="card-header">🔍 Semantic Search</div>
+      <div class="card-body">
+        <label>Query</label>
+        <input type="text" id="query-input" placeholder="What do the documents say about…" onkeydown="if(event.key==='Enter')search()" />
+        <div class="row">
+          <div>
+            <label>Results</label>
+            <input type="number" id="query-n" value="5" min="1" max="20" />
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button onclick="search()" style="margin:0;">Search</button>
+          </div>
+        </div>
+        <div id="results" style="margin-top:14px;"></div>
+      </div>
+    </div>
+
+    <!-- Documents -->
+    <div class="card">
+      <div class="card-header">🗂 Indexed Documents</div>
+      <div class="card-body" style="padding:0;">
+        <div id="doc-list" style="padding:16px 18px;">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>doc2kb — local knowledge base &nbsp;·&nbsp; Obsidian vault + ChromaDB</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

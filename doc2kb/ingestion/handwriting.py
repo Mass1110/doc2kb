@@ -1,4 +1,4 @@
-"""OCR for handwritten images: TrOCR local model with Google Vision cloud fallback."""
+"""OCR for handwritten images: EasyOCR local engine with Google Vision cloud fallback."""
 from __future__ import annotations
 
 import hashlib
@@ -7,55 +7,27 @@ import shutil
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from PIL import Image
 
 from ..config import (
     ATTACHMENTS_DIR,
-    HANDWRITING_MODEL,
     OCR_CONFIDENCE_THRESHOLD,
+    OCR_DEFAULT_LANGS,
 )
 
-if TYPE_CHECKING:
-    pass
 
+def _easyocr(path: Path, langs: list[str]) -> tuple[str, float]:
+    import easyocr
 
-def _trocr(image: Image.Image) -> tuple[str, float]:
-    """Run TrOCR and return (text, mean_confidence)."""
-    from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-    import torch
-
-    processor = TrOCRProcessor.from_pretrained(HANDWRITING_MODEL)
-    model = VisionEncoderDecoderModel.from_pretrained(HANDWRITING_MODEL)
-    model.eval()
-
-    pixel_values = processor(images=image.convert("RGB"), return_tensors="pt").pixel_values
-
-    with torch.no_grad():
-        outputs = model.generate(
-            pixel_values,
-            output_scores=True,
-            return_dict_in_generate=True,
-        )
-
-    generated_ids = outputs.sequences
-    text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-    # Compute mean token probability as confidence proxy
-    if outputs.scores:
-        import torch.nn.functional as F
-
-        probs = [F.softmax(s, dim=-1).max(dim=-1).values for s in outputs.scores]
-        confidence = float(sum(p.mean().item() for p in probs) / len(probs))
-    else:
-        confidence = 1.0
-
+    reader = easyocr.Reader(langs, gpu=False, verbose=False)
+    results = reader.readtext(str(path))
+    if not results:
+        return "", 0.0
+    text = "\n".join(r[1] for r in results)
+    confidence = sum(r[2] for r in results) / len(results)
     return text, confidence
 
 
 def _google_vision(path: Path) -> str:
-    """Call Google Vision API for handwriting recognition."""
     from google.cloud import vision  # type: ignore[import]
 
     client = vision.ImageAnnotatorClient()
@@ -68,10 +40,10 @@ def _google_vision(path: Path) -> str:
     return response.full_text_annotation.text
 
 
-def ingest_handwriting(path: Path) -> tuple[str, dict]:
-    image = Image.open(path)
+def ingest_handwriting(path: Path, langs: list[str] | None = None) -> tuple[str, dict]:
+    langs = list(langs) if langs else list(OCR_DEFAULT_LANGS)
 
-    text, confidence = _trocr(image)
+    text, confidence = _easyocr(path, langs)
 
     used_cloud = False
     creds_set = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
@@ -83,7 +55,7 @@ def ingest_handwriting(path: Path) -> tuple[str, dict]:
                 used_cloud = True
             except Exception as exc:
                 warnings.warn(
-                    f"Google Vision fallback failed ({exc}); using local TrOCR result.",
+                    f"Google Vision fallback failed ({exc}); using local EasyOCR result.",
                     stacklevel=2,
                 )
         else:
@@ -94,12 +66,15 @@ def ingest_handwriting(path: Path) -> tuple[str, dict]:
                 stacklevel=2,
             )
 
-    # Copy image to vault attachments so Obsidian can display it
     ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
     dest = ATTACHMENTS_DIR / path.name
     shutil.copy2(path, dest)
 
-    ocr_note = "Google Vision (cloud)" if used_cloud else f"TrOCR local (confidence {confidence:.2f})"
+    if used_cloud:
+        ocr_note = "Google Vision (cloud)"
+    else:
+        ocr_note = f"EasyOCR local, langs={langs}, confidence={confidence:.2f}"
+
     md_text = (
         f"![[attachments/{path.name}]]\n\n"
         f"*OCR via {ocr_note}*\n\n"

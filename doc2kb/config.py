@@ -7,10 +7,10 @@ CHROMA_DIR = BASE_DIR / "output" / "chroma_db"
 
 COLLECTION_NAME = "knowledge_base"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-HANDWRITING_MODEL = "microsoft/trocr-base-handwritten"
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 OCR_CONFIDENCE_THRESHOLD = 0.75
+OCR_DEFAULT_LANGS = ["en"]
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".gif", ".webp"}

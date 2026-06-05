@@ -5,11 +5,14 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 
+import pymupdf
 import pymupdf4llm
 
 
 def ingest_pdf(path: Path) -> tuple[str, dict]:
-    md_text = pymupdf4llm.to_markdown(str(path))
+    doc = pymupdf.open(str(path))
+    md_text = pymupdf4llm.to_markdown(doc)
+    doc.close()
 
     doc_id = "sha256-" + hashlib.sha256(path.resolve().as_posix().encode()).hexdigest()[:16]
 

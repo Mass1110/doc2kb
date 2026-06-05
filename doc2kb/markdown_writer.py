@@ -44,6 +44,21 @@ def save_note(
     return note_path
 
 
+def delete_note(doc_id: str) -> Path | None:
+    """Find and delete the Obsidian note with the given doc_id. Returns path or None."""
+    for note_path in VAULT_DIR.glob("*.md"):
+        if note_path.name == "_INDEX.md":
+            continue
+        try:
+            post = frontmatter.load(str(note_path))
+        except Exception:
+            continue
+        if post.metadata.get("doc_id") == doc_id:
+            note_path.unlink()
+            return note_path
+    return None
+
+
 def regenerate_index() -> Path:
     """Rebuild _INDEX.md in the vault with links to all notes, grouped by type."""
     VAULT_DIR.mkdir(parents=True, exist_ok=True)
