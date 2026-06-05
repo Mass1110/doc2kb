@@ -1,9 +1,14 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).parent.parent
 
-# Output root: override with DOC2KB_OUTPUT_DIR env var.
+# Load .env from the project root (silently ignored if absent)
+load_dotenv(BASE_DIR / ".env")
+
+# Output root: override with DOC2KB_OUTPUT_DIR in .env or as env var.
 # Default: <repo>/output
 OUTPUT_DIR = Path(os.environ.get("DOC2KB_OUTPUT_DIR", BASE_DIR / "output"))
 
