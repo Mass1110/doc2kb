@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from .config import CHUNK_SIZE, CHUNK_OVERLAP
-from .ingestion import ingest
+from .ingestion import ingest, collect_files
 from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
 from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
@@ -32,14 +32,22 @@ def cli() -> None:
     help="OCR language code(s) for image files (EasyOCR). E.g. --lang it --lang en",
 )
 def ingest_cmd(source: str, force: bool, batch: bool, lang: tuple[str, ...]) -> None:
-    """Ingest a URL, local file, or batch file into the knowledge base."""
+    """Ingest a URL, file, directory (recursive), or batch file into the knowledge base."""
     langs = list(lang)
+
     if batch:
         sources = [
             line.strip()
             for line in Path(source).read_text().splitlines()
             if line.strip() and not line.startswith("#")
         ]
+    elif Path(source).is_dir():
+        files = collect_files(Path(source))
+        if not files:
+            click.echo(f"[warn] No supported files found in: {source}")
+            return
+        click.echo(f"[dir] {len(files)} file(s) trovati in '{source}'")
+        sources = [str(f) for f in files]
     else:
         sources = [source]
 

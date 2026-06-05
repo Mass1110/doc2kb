@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..chunker import chunk_markdown
 from ..config import CHUNK_OVERLAP, CHUNK_SIZE
-from ..ingestion import ingest
+from ..ingestion import ingest, collect_files
 from ..markdown_writer import delete_note, regenerate_index, save_note
 from ..store import add_chunks, delete_doc, doc_exists, list_documents
 from ..store import query as kb_query
@@ -91,6 +91,35 @@ async def ingest_file_endpoint(
         raise HTTPException(500, str(exc)) from exc
     finally:
         Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/api/ingest/dir")
+async def ingest_dir_endpoint(body: dict) -> dict:
+    directory: str = body.get("directory", "").strip()
+    if not directory:
+        raise HTTPException(400, "Missing 'directory' field")
+    dir_path = Path(directory)
+    if not dir_path.is_dir():
+        raise HTTPException(400, f"Not a directory: {directory}")
+    force: bool = body.get("force", False)
+    langs: list[str] = body.get("langs", ["en"])
+
+    files = collect_files(dir_path)
+    if not files:
+        return {"status": "empty", "message": "No supported files found", "files": 0}
+
+    results = []
+    for f in files:
+        try:
+            result = _do_ingest(str(f), force, langs)
+            results.append({"file": str(f), **result})
+        except Exception as exc:
+            results.append({"file": str(f), "status": "error", "message": str(exc)})
+
+    ok = sum(1 for r in results if r.get("status") == "ok")
+    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    errors = sum(1 for r in results if r.get("status") == "error")
+    return {"status": "ok", "total": len(files), "indexed": ok, "skipped": skipped, "errors": errors, "details": results}
 
 
 @app.get("/api/query")

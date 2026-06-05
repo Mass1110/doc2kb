@@ -25,3 +25,8 @@ OCR_CONFIDENCE_THRESHOLD = 0.75
 OCR_DEFAULT_LANGS = ["en"]
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".gif", ".webp"}
+SUPPORTED_EXTENSIONS = {
+    ".pdf", ".docx", ".doc", ".pptx", ".ppt",
+    ".txt", ".md", ".html", ".htm",
+    *IMAGE_EXTENSIONS,
+}

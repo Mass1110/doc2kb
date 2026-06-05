@@ -9,7 +9,15 @@ from .docx import ingest_docx
 from .pptx import ingest_pptx
 from .text import ingest_text
 from .handwriting import ingest_handwriting
-from ..config import IMAGE_EXTENSIONS
+from ..config import IMAGE_EXTENSIONS, SUPPORTED_EXTENSIONS
+
+
+def collect_files(directory: Path) -> list[Path]:
+    """Return all supported files under *directory*, recursively, sorted by path."""
+    return sorted(
+        p for p in directory.rglob("*")
+        if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
 
 
 def ingest(source: str, langs: list[str] | None = None) -> tuple[str, dict]:
