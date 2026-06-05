@@ -21,6 +21,10 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 
 ANTHROPIC_OCR_MODEL = "claude-haiku-4-5"
 
+# PDF scanned-page detection: if average extracted chars per page is below
+# this threshold, the PDF is treated as scanned and sent to Claude Vision.
+PDF_SCANNED_THRESHOLD = 100
+
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 OCR_CONFIDENCE_THRESHOLD = 0.75
