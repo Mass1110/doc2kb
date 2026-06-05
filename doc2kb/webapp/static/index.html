@@ -29,6 +29,7 @@
       <div class="tabs">
         <div class="tab active" data-tab="url">URL</div>
         <div class="tab" data-tab="file">File Upload</div>
+        <div class="tab" data-tab="dir">Directory</div>
       </div>
 
       <!-- URL tab -->
@@ -43,6 +44,21 @@
         </label>
         <button id="url-btn" onclick="ingestUrl()">Ingest URL</button>
         <div class="status" id="url-status"></div>
+      </div>
+
+      <!-- Directory tab -->
+      <div class="tab-panel" id="tab-dir">
+        <label>Server-side directory path (absolute)</label>
+        <input type="text" id="dir-input" placeholder="C:\Documenti\Progetti" />
+        <label>OCR Languages (comma-separated, e.g. it,en)</label>
+        <input type="text" id="dir-langs" value="en" placeholder="en" />
+        <label class="check-label">
+          <input type="checkbox" id="dir-force" />
+          Force re-ingest even if already indexed
+        </label>
+        <button id="dir-btn" onclick="ingestDir()">Ingest Directory</button>
+        <div class="status" id="dir-status"></div>
+        <div id="dir-results"></div>
       </div>
 
       <!-- File tab -->

@@ -125,6 +125,59 @@ async function ingestFile() {
   }
 }
 
+// ── Ingest Directory ──────────────────────────────────────────────────────────
+async function ingestDir() {
+  const directory = document.getElementById('dir-input').value.trim();
+  if (!directory) return setStatus('dir-status', 'Please enter a directory path.', 'err');
+
+  const langs = document.getElementById('dir-langs').value
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const force = document.getElementById('dir-force').checked;
+
+  setLoading('dir-btn', true);
+  setStatus('dir-status', '<span class="spinner"></span> Scanning and ingesting…', 'info show');
+  document.getElementById('dir-results').innerHTML = '';
+
+  try {
+    const res = await fetch('/api/ingest/dir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory, force, langs }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+
+    if (data.status === 'empty') {
+      setStatus('dir-status', '⚠️ No supported files found in that directory.', 'info');
+    } else {
+      setStatus('dir-status',
+        `✅ Done — ${data.indexed} indexed, ${data.skipped} skipped, ${data.errors} errors (${data.total} total)`,
+        data.errors ? 'info' : 'ok');
+
+      // Detail table
+      const rows = data.details.map(r => {
+        const name = r.file.replace(/.*[\\/]/, '');
+        const icon = r.status === 'ok' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
+        const detail = r.status === 'ok' ? `${r.chunks} chunks`
+                     : r.status === 'skipped' ? 'already indexed'
+                     : escHtml(r.message || '');
+        return `<tr><td>${icon}</td><td title="${escHtml(r.file)}">${escHtml(name)}</td><td>${detail}</td></tr>`;
+      }).join('');
+
+      document.getElementById('dir-results').innerHTML = `
+        <table class="doc-table" style="margin-top:12px;">
+          <thead><tr><th></th><th>File</th><th>Result</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+    loadDocuments();
+  } catch (err) {
+    setStatus('dir-status', `❌ ${err.message}`, 'err');
+  } finally {
+    setLoading('dir-btn', false);
+  }
+}
+
 // ── Search ────────────────────────────────────────────────────────────────────
 async function search() {
   const q = document.getElementById('query-input').value.trim();
