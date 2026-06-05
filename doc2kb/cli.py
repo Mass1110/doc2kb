@@ -10,6 +10,7 @@ from .ingestion import ingest
 from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
 from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
+from .store import close as store_close
 from .config import VAULT_DIR, CHROMA_DIR
 from .utils import content_doc_id, url_doc_id
 
@@ -67,7 +68,7 @@ def _do_ingest(source: str, force: bool, langs: list[str] | None = None) -> None
         return
 
     note_path = save_note(content, metadata)
-    click.echo(f"  → note saved: {note_path}")
+    click.echo(f"  -> note saved: {note_path}")
 
     chunks = chunk_markdown(content, CHUNK_SIZE, CHUNK_OVERLAP)
     if not chunks:
@@ -75,7 +76,7 @@ def _do_ingest(source: str, force: bool, langs: list[str] | None = None) -> None
         return
 
     add_chunks(chunks, metadata)
-    click.echo(f"  → {len(chunks)} chunk(s) indexed in ChromaDB")
+    click.echo(f"  -> {len(chunks)} chunk(s) indexed in ChromaDB")
 
 
 @cli.command("query")
@@ -130,34 +131,54 @@ def delete_cmd(source: str | None, doc_id: str | None) -> None:
     if chunks_removed == 0:
         click.echo(f"[warn] No chunks found for doc_id={target_id}")
     else:
-        click.echo(f"  → {chunks_removed} chunk(s) removed from ChromaDB")
+        click.echo(f"  -> {chunks_removed} chunk(s) removed from ChromaDB")
 
     note_path = delete_note(target_id)
     if note_path:
-        click.echo(f"  → note deleted: {note_path}")
+        click.echo(f"  -> note deleted: {note_path}")
     else:
         click.echo("  [warn] No vault note found for this document.")
 
     regenerate_index()
-    click.echo("  → _INDEX.md regenerated")
+    click.echo("  -> _INDEX.md regenerated")
 
 
 @cli.command("reset")
-@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompts (use in scripts).")
 def reset_cmd(yes: bool) -> None:
     """Delete all data: ChromaDB collection + Obsidian vault notes."""
+    import os
     import shutil
 
     if not yes:
-        click.confirm(
-            "Questo cancellerà tutto il database e tutte le note del vault. Continuare?",
-            abort=True,
-        )
+        click.echo("ATTENZIONE: questa operazione e' irreversibile.")
+        click.echo(f"  Vault:   {VAULT_DIR}")
+        click.echo(f"  ChromaDB: {CHROMA_DIR}")
+        click.echo()
+        confirm = click.prompt("Digita RESET per confermare")
+        if confirm != "RESET":
+            click.echo("Operazione annullata.")
+            return
+
+    # Release ChromaDB file handles before deleting (files stay locked on Windows)
+    import gc
+    store_close()
+    gc.collect()
 
     # Remove ChromaDB
     if CHROMA_DIR.exists():
-        shutil.rmtree(CHROMA_DIR)
-        click.echo(f"  → ChromaDB eliminato: {CHROMA_DIR}")
+        import stat
+
+        def _force_remove(func, path, exc_info):
+            """On Windows, clear read-only flag and retry."""
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            except Exception:
+                pass
+
+        shutil.rmtree(CHROMA_DIR, onexc=_force_remove)
+        click.echo(f"  -> ChromaDB eliminato: {CHROMA_DIR}")
     else:
         click.echo("  [skip] ChromaDB non trovato.")
 
@@ -168,9 +189,9 @@ def reset_cmd(yes: bool) -> None:
             if f.name != "_INDEX.md":
                 f.unlink()
                 removed += 1
-        click.echo(f"  → {removed} nota/e eliminate dal vault.")
+        click.echo(f"  -> {removed} nota/e eliminate dal vault.")
         regenerate_index()
-        click.echo("  → _INDEX.md rigenerato.")
+        click.echo("  -> _INDEX.md rigenerato.")
     else:
         click.echo("  [skip] Vault non trovato.")
 

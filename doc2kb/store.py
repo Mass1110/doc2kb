@@ -1,26 +1,40 @@
 """ChromaDB persistence layer: add chunks, query, list documents."""
 from __future__ import annotations
 
-from functools import lru_cache
-
 import chromadb
 from chromadb.utils import embedding_functions
 
 from .config import CHROMA_DIR, COLLECTION_NAME, EMBED_MODEL
 
+# Module-level singletons so we can close them explicitly on reset.
+_client: chromadb.PersistentClient | None = None
+_col: chromadb.Collection | None = None
 
-@lru_cache(maxsize=1)
+
 def _collection() -> chromadb.Collection:
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBED_MODEL
-    )
-    return client.get_or_create_collection(
-        COLLECTION_NAME,
-        embedding_function=ef,
-        metadata={"hnsw:space": "cosine"},
-    )
+    global _client, _col
+    if _col is None:
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        _client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+        ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=EMBED_MODEL
+        )
+        _col = _client.get_or_create_collection(
+            COLLECTION_NAME,
+            embedding_function=ef,
+            metadata={"hnsw:space": "cosine"},
+        )
+    return _col
+
+
+def close() -> None:
+    """Release the ChromaDB client and file handles (needed before deleting the dir)."""
+    global _client, _col
+    _col = None
+    if _client is not None:
+        # chromadb >=0.5 exposes __del__ / internal teardown; setting to None
+        # drops the last reference so GC can close SQLite handles.
+        _client = None
 
 
 def doc_exists(doc_id: str) -> bool:
