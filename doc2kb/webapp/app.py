@@ -29,12 +29,24 @@ def _doc_id_for(source: str) -> str:
     return content_doc_id(Path(source))
 
 
-def _do_ingest(source: str, force: bool, langs: list[str]) -> dict:
+def _do_ingest(
+    source: str,
+    force: bool,
+    langs: list[str],
+    display_name: str | None = None,
+) -> dict:
     doc_id = _doc_id_for(source)
     if not force and doc_exists(doc_id):
         return {"status": "skipped", "doc_id": doc_id, "message": "Already indexed"}
 
     content, metadata = ingest(source, langs=langs if langs else None)
+
+    # For file uploads the source is a temp path — replace title and source
+    # with the original filename so vault notes get friendly names.
+    if display_name:
+        metadata["title"] = Path(display_name).stem
+        metadata["source"] = display_name
+
     save_note(content, metadata)
     chunks = chunk_markdown(content, CHUNK_SIZE, CHUNK_OVERLAP)
     if chunks:
@@ -74,7 +86,7 @@ async def ingest_file_endpoint(
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
     try:
-        return _do_ingest(tmp_path, force, lang_list)
+        return _do_ingest(tmp_path, force, lang_list, display_name=file.filename)
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
     finally:
