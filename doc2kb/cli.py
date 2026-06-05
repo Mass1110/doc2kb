@@ -10,6 +10,7 @@ from .ingestion import ingest
 from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
 from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
+from .config import VAULT_DIR, CHROMA_DIR
 from .utils import content_doc_id, url_doc_id
 
 
@@ -139,6 +140,41 @@ def delete_cmd(source: str | None, doc_id: str | None) -> None:
 
     regenerate_index()
     click.echo("  → _INDEX.md regenerated")
+
+
+@cli.command("reset")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+def reset_cmd(yes: bool) -> None:
+    """Delete all data: ChromaDB collection + Obsidian vault notes."""
+    import shutil
+
+    if not yes:
+        click.confirm(
+            "Questo cancellerà tutto il database e tutte le note del vault. Continuare?",
+            abort=True,
+        )
+
+    # Remove ChromaDB
+    if CHROMA_DIR.exists():
+        shutil.rmtree(CHROMA_DIR)
+        click.echo(f"  → ChromaDB eliminato: {CHROMA_DIR}")
+    else:
+        click.echo("  [skip] ChromaDB non trovato.")
+
+    # Remove all vault notes except _INDEX.md and .obsidian settings
+    removed = 0
+    if VAULT_DIR.exists():
+        for f in VAULT_DIR.glob("*.md"):
+            if f.name != "_INDEX.md":
+                f.unlink()
+                removed += 1
+        click.echo(f"  → {removed} nota/e eliminate dal vault.")
+        regenerate_index()
+        click.echo("  → _INDEX.md rigenerato.")
+    else:
+        click.echo("  [skip] Vault non trovato.")
+
+    click.echo("Reset completato.")
 
 
 @cli.command("index")
