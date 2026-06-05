@@ -25,12 +25,14 @@ dependencies = [
 [project.optional-dependencies]
 # Local handwriting OCR (80+ languages via EasyOCR)
 ocr = ["easyocr>=1.7"]
-# Local OCR + Google Vision cloud fallback
-cloud = ["easyocr>=1.7", "google-cloud-vision>=3.7"]
+# Claude Vision OCR (best quality for handwriting)
+ocr-claude = ["anthropic>=0.40"]
+# Google Vision cloud OCR
+ocr-google = ["easyocr>=1.7", "google-cloud-vision>=3.7"]
 # Web frontend
 web = ["fastapi>=0.111", "uvicorn>=0.30", "python-multipart>=0.0.9"]
 # Everything
-all = ["easyocr>=1.7", "google-cloud-vision>=3.7", "fastapi>=0.111", "uvicorn>=0.30", "python-multipart>=0.0.9"]
+all = ["easyocr>=1.7", "anthropic>=0.40", "google-cloud-vision>=3.7", "fastapi>=0.111", "uvicorn>=0.30", "python-multipart>=0.0.9"]
 
 [project.scripts]
 doc2kb = "doc2kb.cli:cli"

@@ -1,6 +1,13 @@
-"""OCR for handwritten images: EasyOCR local engine with Google Vision cloud fallback."""
+"""OCR for handwritten images.
+
+Engine priority (first available wins):
+  1. Claude Vision  — if ANTHROPIC_API_KEY is set
+  2. Google Vision  — if GOOGLE_APPLICATION_CREDENTIALS is set
+  3. EasyOCR        — local fallback (always available)
+"""
 from __future__ import annotations
 
+import base64
 import os
 import shutil
 import warnings
@@ -11,23 +18,59 @@ from ..config import (
     ATTACHMENTS_DIR,
     OCR_CONFIDENCE_THRESHOLD,
     OCR_DEFAULT_LANGS,
+    ANTHROPIC_OCR_MODEL,
 )
 from ..utils import content_doc_id
 
 
-def _easyocr(path: Path, langs: list[str]) -> tuple[str, float]:
-    import easyocr
+# ── Engine implementations ────────────────────────────────────────────────────
 
-    reader = easyocr.Reader(langs, gpu=False, verbose=False)
-    results = reader.readtext(str(path))
-    if not results:
-        return "", 0.0
-    text = "\n".join(r[1] for r in results)
-    confidence = sum(r[2] for r in results) / len(results)
-    return text, confidence
+def _claude_vision(path: Path) -> str:
+    """Transcribe handwritten text via Claude Vision."""
+    import anthropic
+
+    image_data = base64.standard_b64encode(path.read_bytes()).decode()
+    suffix = path.suffix.lower().lstrip(".")
+    media_type_map = {
+        "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "png": "image/png", "gif": "image/gif",
+        "webp": "image/webp",
+    }
+    media_type = media_type_map.get(suffix, "image/jpeg")
+
+    client = anthropic.Anthropic()
+    message = client.messages.create(
+        model=ANTHROPIC_OCR_MODEL,
+        max_tokens=4096,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": image_data,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "Please transcribe all the handwritten text in this image. "
+                            "Preserve the original structure (paragraphs, lists, headings) as much as possible. "
+                            "Output only the transcribed text, with no commentary."
+                        ),
+                    },
+                ],
+            }
+        ],
+    )
+    return message.content[0].text
 
 
 def _google_vision(path: Path) -> str:
+    """Transcribe text via Google Cloud Vision API."""
     from google.cloud import vision  # type: ignore[import]
 
     client = vision.ImageAnnotatorClient()
@@ -40,48 +83,70 @@ def _google_vision(path: Path) -> str:
     return response.full_text_annotation.text
 
 
+def _easyocr(path: Path, langs: list[str]) -> tuple[str, float]:
+    """Transcribe text via EasyOCR (local)."""
+    import easyocr
+
+    reader = easyocr.Reader(langs, gpu=False, verbose=False)
+    results = reader.readtext(str(path))
+    if not results:
+        return "", 0.0
+    text = "\n".join(r[1] for r in results)
+    confidence = sum(r[2] for r in results) / len(results)
+    return text, confidence
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+
 def ingest_handwriting(path: Path, langs: list[str] | None = None) -> tuple[str, dict]:
     langs = list(langs) if langs else list(OCR_DEFAULT_LANGS)
 
-    text, confidence = _easyocr(path, langs)
+    engine_used = "EasyOCR local"
+    text = ""
 
-    used_cloud = False
-    creds_set = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
-
-    if confidence < OCR_CONFIDENCE_THRESHOLD:
-        if creds_set:
-            try:
-                text = _google_vision(path)
-                used_cloud = True
-            except Exception as exc:
-                warnings.warn(
-                    f"Google Vision fallback failed ({exc}); using local EasyOCR result.",
-                    stacklevel=2,
-                )
-        else:
+    # 1 — Claude Vision (best quality)
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            text = _claude_vision(path)
+            engine_used = f"Claude Vision ({ANTHROPIC_OCR_MODEL})"
+        except Exception as exc:
             warnings.warn(
-                f"OCR confidence {confidence:.2f} below threshold "
-                f"({OCR_CONFIDENCE_THRESHOLD}). "
-                "Set GOOGLE_APPLICATION_CREDENTIALS for cloud fallback.",
+                f"Claude Vision failed ({exc}); trying next engine.",
                 stacklevel=2,
             )
 
-    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = ATTACHMENTS_DIR / path.name
-    shutil.copy2(path, dest)
+    # 2 — Google Vision
+    if not text and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        try:
+            text = _google_vision(path)
+            engine_used = "Google Vision"
+        except Exception as exc:
+            warnings.warn(
+                f"Google Vision failed ({exc}); falling back to EasyOCR.",
+                stacklevel=2,
+            )
 
-    if used_cloud:
-        ocr_note = "Google Vision (cloud)"
-    else:
-        ocr_note = f"EasyOCR local, langs={langs}, confidence={confidence:.2f}"
+    # 3 — EasyOCR (local fallback)
+    if not text:
+        text, confidence = _easyocr(path, langs)
+        engine_used = f"EasyOCR local (langs={langs}, confidence={confidence:.2f})"
+        if confidence < OCR_CONFIDENCE_THRESHOLD:
+            warnings.warn(
+                f"EasyOCR confidence {confidence:.2f} is below threshold "
+                f"({OCR_CONFIDENCE_THRESHOLD}). Consider setting ANTHROPIC_API_KEY "
+                "or GOOGLE_APPLICATION_CREDENTIALS for better results.",
+                stacklevel=2,
+            )
+
+    # Copy image to vault attachments for Obsidian display
+    ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, ATTACHMENTS_DIR / path.name)
 
     md_text = (
         f"![[attachments/{path.name}]]\n\n"
-        f"*OCR via {ocr_note}*\n\n"
+        f"*OCR via {engine_used}*\n\n"
         f"{text}"
     )
-
-    doc_id = content_doc_id(path)
 
     metadata = {
         "title": path.stem,
@@ -89,6 +154,6 @@ def ingest_handwriting(path: Path, langs: list[str] | None = None) -> tuple[str,
         "type": "handwriting",
         "date_ingested": datetime.now().isoformat(timespec="seconds"),
         "tags": ["handwriting"],
-        "doc_id": doc_id,
+        "doc_id": content_doc_id(path),
     }
     return md_text, metadata
