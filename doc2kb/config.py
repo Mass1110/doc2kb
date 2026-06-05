@@ -1,9 +1,15 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
-VAULT_DIR = BASE_DIR / "output" / "obsidian_vault"
+
+# Output root: override with DOC2KB_OUTPUT_DIR env var.
+# Default: <repo>/output
+OUTPUT_DIR = Path(os.environ.get("DOC2KB_OUTPUT_DIR", BASE_DIR / "output"))
+
+VAULT_DIR = OUTPUT_DIR / "obsidian_vault"
 ATTACHMENTS_DIR = VAULT_DIR / "attachments"
-CHROMA_DIR = BASE_DIR / "output" / "chroma_db"
+CHROMA_DIR = OUTPUT_DIR / "chroma_db"
 
 COLLECTION_NAME = "knowledge_base"
 EMBED_MODEL = "all-MiniLM-L6-v2"
