@@ -1,7 +1,6 @@
 """OCR for handwritten images: EasyOCR local engine with Google Vision cloud fallback."""
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import warnings
@@ -13,6 +12,7 @@ from ..config import (
     OCR_CONFIDENCE_THRESHOLD,
     OCR_DEFAULT_LANGS,
 )
+from ..utils import content_doc_id
 
 
 def _easyocr(path: Path, langs: list[str]) -> tuple[str, float]:
@@ -81,7 +81,7 @@ def ingest_handwriting(path: Path, langs: list[str] | None = None) -> tuple[str,
         f"{text}"
     )
 
-    doc_id = "sha256-" + hashlib.sha256(path.resolve().as_posix().encode()).hexdigest()[:16]
+    doc_id = content_doc_id(path)
 
     metadata = {
         "title": path.stem,

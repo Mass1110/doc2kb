@@ -1,12 +1,13 @@
 """Extract text from a PPTX presentation slide by slide."""
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime
 from pathlib import Path
 
 from pptx import Presentation
 from pptx.util import Pt
+
+from ..utils import content_doc_id
 
 
 def ingest_pptx(path: Path) -> tuple[str, dict]:
@@ -32,7 +33,7 @@ def ingest_pptx(path: Path) -> tuple[str, dict]:
         lines.append("")
 
     md_text = "\n".join(lines)
-    doc_id = "sha256-" + hashlib.sha256(path.resolve().as_posix().encode()).hexdigest()[:16]
+    doc_id = content_doc_id(path)
 
     metadata = {
         "title": path.stem,

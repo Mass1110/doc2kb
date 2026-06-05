@@ -1,12 +1,13 @@
 """Convert a PDF to markdown via pymupdf4llm."""
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime
 from pathlib import Path
 
 import pymupdf
 import pymupdf4llm
+
+from ..utils import content_doc_id
 
 
 def ingest_pdf(path: Path) -> tuple[str, dict]:
@@ -14,7 +15,7 @@ def ingest_pdf(path: Path) -> tuple[str, dict]:
     md_text = pymupdf4llm.to_markdown(doc)
     doc.close()
 
-    doc_id = "sha256-" + hashlib.sha256(path.resolve().as_posix().encode()).hexdigest()[:16]
+    doc_id = content_doc_id(path)
 
     metadata = {
         "title": path.stem,

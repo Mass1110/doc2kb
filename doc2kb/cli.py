@@ -1,7 +1,6 @@
 """doc2kb CLI — ingest, query, list, index, delete, serve."""
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import click
@@ -11,6 +10,7 @@ from .ingestion import ingest
 from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
 from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
+from .utils import content_doc_id, url_doc_id
 
 
 @click.group()
@@ -46,8 +46,9 @@ def ingest_cmd(source: str, force: bool, batch: bool, lang: tuple[str, ...]) -> 
 
 
 def _doc_id_for(source: str) -> str:
-    key = source if source.startswith("http") else str(Path(source).resolve())
-    return "sha256-" + hashlib.sha256(key.encode()).hexdigest()[:16]
+    if source.startswith("http://") or source.startswith("https://"):
+        return url_doc_id(source)
+    return content_doc_id(Path(source))
 
 
 def _do_ingest(source: str, force: bool, langs: list[str] | None = None) -> None:

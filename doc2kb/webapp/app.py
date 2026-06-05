@@ -1,7 +1,6 @@
 """FastAPI web application for doc2kb."""
 from __future__ import annotations
 
-import hashlib
 import shutil
 import tempfile
 from pathlib import Path
@@ -17,6 +16,7 @@ from ..ingestion import ingest
 from ..markdown_writer import delete_note, regenerate_index, save_note
 from ..store import add_chunks, delete_doc, doc_exists, list_documents
 from ..store import query as kb_query
+from ..utils import content_doc_id, url_doc_id
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -24,8 +24,9 @@ app = FastAPI(title="doc2kb", version="0.1.0")
 
 
 def _doc_id_for(source: str) -> str:
-    key = source if source.startswith("http") else str(Path(source).resolve())
-    return "sha256-" + hashlib.sha256(key.encode()).hexdigest()[:16]
+    if source.startswith("http://") or source.startswith("https://"):
+        return url_doc_id(source)
+    return content_doc_id(Path(source))
 
 
 def _do_ingest(source: str, force: bool, langs: list[str]) -> dict:

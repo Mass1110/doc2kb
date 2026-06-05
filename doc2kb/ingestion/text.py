@@ -1,11 +1,12 @@
 """Ingest plain-text or HTML files as markdown."""
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime
 from pathlib import Path
 
 from markdownify import markdownify
+
+from ..utils import content_doc_id
 
 
 def ingest_text(path: Path) -> tuple[str, dict]:
@@ -17,7 +18,7 @@ def ingest_text(path: Path) -> tuple[str, dict]:
     else:
         md_text = raw
 
-    doc_id = "sha256-" + hashlib.sha256(path.resolve().as_posix().encode()).hexdigest()[:16]
+    doc_id = content_doc_id(path)
 
     metadata = {
         "title": path.stem,
