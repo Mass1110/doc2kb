@@ -6,14 +6,16 @@ from functools import lru_cache
 import chromadb
 from chromadb.utils import embedding_functions
 
-from .config import CHROMA_DIR, COLLECTION_NAME
+from .config import CHROMA_DIR, COLLECTION_NAME, EMBED_MODEL
 
 
 @lru_cache(maxsize=1)
 def _collection() -> chromadb.Collection:
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    ef = embedding_functions.DefaultEmbeddingFunction()
+    ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name=EMBED_MODEL
+    )
     return client.get_or_create_collection(
         COLLECTION_NAME,
         embedding_function=ef,
