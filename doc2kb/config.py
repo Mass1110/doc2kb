@@ -19,7 +19,12 @@ CHROMA_DIR = OUTPUT_DIR / "chroma_db"
 COLLECTION_NAME = "knowledge_base"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 
+# Wiki directory: LLM-maintained pages (entities, concepts, index, log)
+WIKI_DIR = VAULT_DIR / "wiki"
+
 ANTHROPIC_OCR_MODEL = "claude-haiku-4-5"
+# Model used for wiki synthesis and wiki queries
+WIKI_MODEL = "claude-haiku-4-5"
 
 # PDF scanned-page detection: if average extracted chars per page is below
 # this threshold, the PDF is treated as scanned and sent to Claude Vision.

@@ -11,7 +11,7 @@ from .markdown_writer import save_note, regenerate_index, delete_note
 from .chunker import chunk_markdown
 from .store import add_chunks, doc_exists, query as kb_query, list_documents, delete_doc
 from .store import close as store_close
-from .config import VAULT_DIR, CHROMA_DIR
+from .config import VAULT_DIR, CHROMA_DIR, WIKI_DIR
 from .utils import content_doc_id, url_doc_id
 
 
@@ -160,7 +160,8 @@ def reset_cmd(yes: bool) -> None:
 
     if not yes:
         click.echo("ATTENZIONE: questa operazione e' irreversibile.")
-        click.echo(f"  Vault:   {VAULT_DIR}")
+        click.echo(f"  Vault:    {VAULT_DIR}")
+        click.echo(f"  Wiki:     {WIKI_DIR}")
         click.echo(f"  ChromaDB: {CHROMA_DIR}")
         click.echo()
         confirm = click.prompt("Digita RESET per confermare")
@@ -170,25 +171,31 @@ def reset_cmd(yes: bool) -> None:
 
     # Release ChromaDB file handles before deleting (files stay locked on Windows)
     import gc
+    import stat
     store_close()
     gc.collect()
 
+    def _force_remove(func, path, exc_info):
+        """On Windows, clear read-only flag and retry."""
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            pass
+
     # Remove ChromaDB
     if CHROMA_DIR.exists():
-        import stat
-
-        def _force_remove(func, path, exc_info):
-            """On Windows, clear read-only flag and retry."""
-            try:
-                os.chmod(path, stat.S_IWRITE)
-                func(path)
-            except Exception:
-                pass
-
         shutil.rmtree(CHROMA_DIR, onexc=_force_remove)
         click.echo(f"  -> ChromaDB eliminato: {CHROMA_DIR}")
     else:
         click.echo("  [skip] ChromaDB non trovato.")
+
+    # Remove wiki directory
+    if WIKI_DIR.exists():
+        shutil.rmtree(WIKI_DIR, onexc=_force_remove)
+        click.echo(f"  -> Wiki eliminata: {WIKI_DIR}")
+    else:
+        click.echo("  [skip] Wiki non trovata.")
 
     # Remove all vault notes except _INDEX.md and .obsidian settings
     removed = 0

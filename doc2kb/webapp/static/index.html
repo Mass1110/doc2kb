@@ -3,128 +3,231 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>doc2kb</title>
+  <title>doc2kb PKB</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
 
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
 <header>
-  <h1><span class="logo">📚</span> doc2kb</h1>
-  <div class="header-right">
-    <span class="badge" id="doc-count">0 documents</span>
-    <button onclick="rebuildIndex()" style="width:auto;margin:0;padding:6px 14px;font-size:12px;">
-      Rebuild Index
-    </button>
+  <h1>
+    <span class="logo">📚</span>
+    doc2kb
+    <span class="subtitle">PKB</span>
+  </h1>
+  <div class="header-stats">
+    <span class="badge" id="stat-docs">— docs</span>
+    <span class="badge" id="stat-pages">— wiki pages</span>
   </div>
 </header>
 
-<main>
-  <!-- LEFT COLUMN: Ingest -->
-  <div>
-    <div class="card">
-      <div class="card-header">⬆️ Ingest</div>
+<!-- ── App layout ─────────────────────────────────────────────────────────── -->
+<div class="app-layout">
 
-      <div class="tabs">
-        <div class="tab active" data-tab="url">URL</div>
-        <div class="tab" data-tab="file">File Upload</div>
-        <div class="tab" data-tab="dir">Directory</div>
-      </div>
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <button class="nav-item active" data-view="home">
+      <span class="nav-icon">🏠</span> Home
+    </button>
+    <button class="nav-item" data-view="ingest">
+      <span class="nav-icon">⬆️</span> Ingest
+    </button>
+    <button class="nav-item" data-view="wiki">
+      <span class="nav-icon">📖</span> Wiki
+    </button>
+    <button class="nav-item" data-view="search">
+      <span class="nav-icon">🔍</span> Search
+    </button>
+    <button class="nav-item" data-view="docs">
+      <span class="nav-icon">🗂</span> Documents
+    </button>
 
-      <!-- URL tab -->
-      <div class="tab-panel active" id="tab-url">
-        <label>URL to ingest</label>
-        <input type="url" id="url-input" placeholder="https://example.com/article" />
-        <label>OCR Languages (comma-separated, e.g. it,en)</label>
-        <input type="text" id="url-langs" value="en" placeholder="en" />
-        <label class="check-label">
-          <input type="checkbox" id="url-force" />
-          Force re-ingest even if already indexed
-        </label>
-        <button id="url-btn" onclick="ingestUrl()">Ingest URL</button>
-        <div class="status" id="url-status"></div>
-      </div>
+    <div class="sidebar-bottom">
+      <button class="nav-item" onclick="rebuildIndex()">
+        <span class="nav-icon">🔄</span> Rebuild Index
+      </button>
+    </div>
+  </nav>
 
-      <!-- Directory tab -->
-      <div class="tab-panel" id="tab-dir">
-        <label>Select a folder to ingest</label>
-        <div class="drop-zone" id="dir-drop-zone" onclick="document.getElementById('dir-input').click()">
-          <input type="file" id="dir-input" webkitdirectory multiple
-                 accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
-          <div class="drop-icon">📁</div>
-          <p>Click to choose a folder</p>
-          <div class="file-name" id="dir-folder-name"></div>
+  <!-- Main content -->
+  <main class="content">
+
+    <!-- ── HOME ──────────────────────────────────────────────────────────── -->
+    <div id="view-home" class="view active">
+      <div class="view-title">Dashboard</div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="home-docs">—</div>
+          <div class="stat-label">Sources ingested</div>
         </div>
-        <label>OCR Languages (comma-separated, e.g. it,en)</label>
-        <input type="text" id="dir-langs" value="en" placeholder="en" />
-        <label class="check-label">
-          <input type="checkbox" id="dir-force" />
-          Force re-ingest even if already indexed
-        </label>
-        <button id="dir-btn" onclick="ingestDir()" disabled>Ingest Directory</button>
-        <div class="status" id="dir-status"></div>
-        <div id="dir-results"></div>
+        <div class="stat-card">
+          <div class="stat-value" id="home-wiki">—</div>
+          <div class="stat-label">Wiki pages</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="home-cats">—</div>
+          <div class="stat-label">Categories</div>
+        </div>
       </div>
 
-      <!-- File tab -->
-      <div class="tab-panel" id="tab-file">
-        <label>Drop a file or click to browse</label>
-        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
-          <input type="file" id="file-input" accept=".pdf,.docx,.pptx,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
-          <div class="drop-icon">📂</div>
-          <p>PDF, DOCX, PPTX, TXT, HTML, images</p>
-          <div class="file-name" id="file-name"></div>
+      <div class="card">
+        <div class="card-header">📋 Recent Activity</div>
+        <div id="activity-log" class="card-body">
+          <div class="empty"><span class="spinner"></span> Loading…</div>
         </div>
-        <label>OCR Languages (for images, comma-separated)</label>
-        <input type="text" id="file-langs" value="en" placeholder="en" />
-        <label class="check-label">
-          <input type="checkbox" id="file-force" />
-          Force re-ingest even if already indexed
-        </label>
-        <button id="file-btn" onclick="ingestFile()">Ingest File</button>
-        <div class="status" id="file-status"></div>
       </div>
     </div>
-  </div>
 
-  <!-- RIGHT COLUMN -->
-  <div class="right-col">
+    <!-- ── INGEST ─────────────────────────────────────────────────────────── -->
+    <div id="view-ingest" class="view">
+      <div class="view-title">Ingest Documents</div>
+      <div class="card">
 
-    <!-- Search -->
-    <div class="card">
-      <div class="card-header">🔍 Semantic Search</div>
-      <div class="card-body">
-        <label>Query</label>
-        <input type="text" id="query-input" placeholder="What do the documents say about…" onkeydown="if(event.key==='Enter')search()" />
-        <div class="row">
-          <div>
-            <label>Results</label>
-            <input type="number" id="query-n" value="5" min="1" max="20" />
+        <div class="tabs">
+          <div class="tab active" data-tab="url">URL</div>
+          <div class="tab" data-tab="file">File Upload</div>
+          <div class="tab" data-tab="dir">Directory</div>
+        </div>
+
+        <!-- URL tab -->
+        <div class="tab-panel active" id="tab-url">
+          <label>URL to ingest</label>
+          <input type="url" id="url-input" placeholder="https://example.com/article" />
+          <label>OCR Languages (comma-separated, e.g. it,en)</label>
+          <input type="text" id="url-langs" value="en" placeholder="en" />
+          <label class="check-label">
+            <input type="checkbox" id="url-force" />
+            Force re-ingest even if already indexed
+          </label>
+          <button id="url-btn" onclick="ingestUrl()">Ingest URL</button>
+          <div class="status" id="url-status"></div>
+        </div>
+
+        <!-- Directory tab -->
+        <div class="tab-panel" id="tab-dir">
+          <label>Select a folder to ingest</label>
+          <div class="drop-zone" id="dir-drop-zone"
+               onclick="document.getElementById('dir-input').click()">
+            <input type="file" id="dir-input" webkitdirectory multiple
+                   accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.html,.htm,
+                           .jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
+            <div class="drop-icon">📁</div>
+            <p>Click to choose a folder</p>
+            <div class="file-name" id="dir-folder-name"></div>
           </div>
-          <div style="display:flex;align-items:flex-end;">
-            <button onclick="search()" style="margin:0;">Search</button>
+          <label>OCR Languages (comma-separated, e.g. it,en)</label>
+          <input type="text" id="dir-langs" value="en" placeholder="en" />
+          <label class="check-label">
+            <input type="checkbox" id="dir-force" />
+            Force re-ingest even if already indexed
+          </label>
+          <button id="dir-btn" onclick="ingestDir()" disabled>Ingest Directory</button>
+          <div class="status" id="dir-status"></div>
+          <div id="dir-results"></div>
+        </div>
+
+        <!-- File tab -->
+        <div class="tab-panel" id="tab-file">
+          <label>Drop a file or click to browse</label>
+          <div class="drop-zone" id="drop-zone"
+               onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input"
+                   accept=".pdf,.docx,.pptx,.txt,.md,.html,.htm,.jpg,.jpeg,.png,.tiff,.bmp,.gif,.webp" />
+            <div class="drop-icon">📂</div>
+            <p>PDF, DOCX, PPTX, TXT, HTML, images</p>
+            <div class="file-name" id="file-name"></div>
+          </div>
+          <label>OCR Languages (for images, comma-separated)</label>
+          <input type="text" id="file-langs" value="en" placeholder="en" />
+          <label class="check-label">
+            <input type="checkbox" id="file-force" />
+            Force re-ingest even if already indexed
+          </label>
+          <button id="file-btn" onclick="ingestFile()">Ingest File</button>
+          <div class="status" id="file-status"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── WIKI ───────────────────────────────────────────────────────────── -->
+    <div id="view-wiki" class="view">
+      <div class="view-title">Knowledge Wiki</div>
+      <div class="wiki-layout">
+
+        <!-- Tree -->
+        <div class="wiki-tree" id="wiki-tree">
+          <div class="empty" style="padding:20px 14px;font-size:12px;">
+            <span class="spinner"></span> Loading…
           </div>
         </div>
-        <div id="results" style="margin-top:14px;"></div>
+
+        <!-- Content + query -->
+        <div class="wiki-content">
+          <div class="wiki-page-header" id="wiki-page-path">
+            Select a page, or ask a question below
+          </div>
+          <div class="wiki-page-body" id="wiki-page-body">
+            <div class="wiki-empty">
+              <p>📖 Welcome to your Knowledge Wiki</p>
+              <p>Ingest documents to start building your knowledge base.<br>
+                 Entities and concepts will be extracted automatically.</p>
+            </div>
+          </div>
+          <div id="wiki-answer-area" style="display:none;"></div>
+          <div class="wiki-query">
+            <input type="text" id="wiki-query-input"
+                   placeholder="Ask a question about your knowledge base…"
+                   onkeydown="if(event.key==='Enter') queryWiki()" />
+            <button id="wiki-ask-btn" onclick="queryWiki()">Ask</button>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    <!-- Documents -->
-    <div class="card">
-      <div class="card-header">🗂 Indexed Documents</div>
-      <div class="card-body" style="padding:0;">
-        <div id="doc-list" style="padding:16px 18px;">
-          <div class="empty">Loading…</div>
+    <!-- ── SEARCH ─────────────────────────────────────────────────────────── -->
+    <div id="view-search" class="view">
+      <div class="view-title">Semantic Search</div>
+      <div class="card">
+        <div class="card-body">
+          <label>Query</label>
+          <input type="text" id="query-input"
+                 placeholder="What do the documents say about…"
+                 onkeydown="if(event.key==='Enter')search()" />
+          <div class="row">
+            <div>
+              <label>Results</label>
+              <input type="number" id="query-n" value="5" min="1" max="20" />
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <button onclick="search()" style="margin:0;">Search</button>
+            </div>
+          </div>
+          <div id="results" style="margin-top:14px;"></div>
         </div>
       </div>
     </div>
 
-  </div>
-</main>
+    <!-- ── DOCUMENTS ──────────────────────────────────────────────────────── -->
+    <div id="view-docs" class="view">
+      <div class="view-title">Indexed Documents</div>
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          <div id="doc-list" style="padding:16px 18px;">
+            <div class="empty">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<footer>doc2kb — local knowledge base &nbsp;·&nbsp; Obsidian vault + ChromaDB</footer>
+  </main>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

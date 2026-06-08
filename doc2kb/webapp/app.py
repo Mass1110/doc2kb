@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..chunker import chunk_markdown
-from ..config import CHUNK_OVERLAP, CHUNK_SIZE
+from ..config import CHUNK_OVERLAP, CHUNK_SIZE, WIKI_DIR
 from ..ingestion import ingest, collect_files
 from ..markdown_writer import delete_note, regenerate_index, save_note
 from ..store import add_chunks, delete_doc, doc_exists, list_documents
@@ -20,7 +20,7 @@ from ..utils import content_doc_id, url_doc_id
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="doc2kb", version="0.1.0")
+app = FastAPI(title="doc2kb", version="0.3.0")
 
 
 def _doc_id_for(source: str) -> str:
@@ -52,14 +52,26 @@ def _do_ingest(
     if chunks:
         add_chunks(chunks, metadata)
     regenerate_index()
+
+    # Wiki synthesis (optional — requires ANTHROPIC_API_KEY + anthropic package)
+    wiki_pages: list[dict] = []
+    try:
+        from ..wiki_writer import synthesize_wiki_update  # noqa: PLC0415
+        wiki_pages = synthesize_wiki_update(content, metadata)
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "doc_id": metadata["doc_id"],
         "title": metadata["title"],
         "type": metadata["type"],
         "chunks": len(chunks),
+        "wiki_pages": len(wiki_pages),
     }
 
+
+# ── Ingest endpoints ──────────────────────────────────────────────────────────
 
 @app.post("/api/ingest/url")
 async def ingest_url_endpoint(body: dict) -> dict:
@@ -119,8 +131,17 @@ async def ingest_dir_endpoint(body: dict) -> dict:
     ok = sum(1 for r in results if r.get("status") == "ok")
     skipped = sum(1 for r in results if r.get("status") == "skipped")
     errors = sum(1 for r in results if r.get("status") == "error")
-    return {"status": "ok", "total": len(files), "indexed": ok, "skipped": skipped, "errors": errors, "details": results}
+    return {
+        "status": "ok",
+        "total": len(files),
+        "indexed": ok,
+        "skipped": skipped,
+        "errors": errors,
+        "details": results,
+    }
 
+
+# ── Query / document endpoints ────────────────────────────────────────────────
 
 @app.get("/api/query")
 async def query_endpoint(
@@ -156,7 +177,112 @@ async def rebuild_index_endpoint() -> dict:
     return {"path": str(path)}
 
 
-# Serve static files and SPA root
+# ── Wiki endpoints ────────────────────────────────────────────────────────────
+
+@app.get("/api/wiki/pages")
+async def wiki_pages_endpoint() -> dict:
+    """Return a flat list of all wiki pages, annotated with category and meta flag."""
+    pages: list[dict] = []
+    if WIKI_DIR.exists():
+        for f in sorted(WIKI_DIR.rglob("*.md")):
+            rel = str(f.relative_to(WIKI_DIR)).replace("\\", "/")
+            parts = rel.split("/")
+            pages.append(
+                {
+                    "path": rel,
+                    "name": f.stem,
+                    "category": parts[0] if len(parts) > 1 else "_root",
+                    "is_meta": f.name.startswith("_"),
+                }
+            )
+    return {"pages": pages}
+
+
+@app.get("/api/wiki/page")
+async def wiki_page_endpoint(path: str = Query(...)) -> dict:
+    """Return the markdown content of a single wiki page."""
+    # Security: prevent path traversal
+    try:
+        target = (WIKI_DIR / path).resolve()
+        if not str(target).startswith(str(WIKI_DIR.resolve())):
+            raise HTTPException(403, "Invalid path")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(403, "Invalid path")
+    if not target.exists():
+        raise HTTPException(404, "Page not found")
+    return {"path": path, "content": target.read_text(encoding="utf-8")}
+
+
+@app.post("/api/wiki/query")
+async def wiki_query_endpoint(body: dict) -> dict:
+    """Answer a question using wiki content via Claude."""
+    question = body.get("question", "").strip()
+    if not question:
+        raise HTTPException(400, "Missing 'question' field")
+    try:
+        from ..wiki_writer import query_wiki  # noqa: PLC0415
+        return query_wiki(question)
+    except Exception as exc:
+        raise HTTPException(500, str(exc)) from exc
+
+
+@app.get("/api/wiki/log")
+async def wiki_log_endpoint() -> dict:
+    """Return the 25 most recent activity log entries."""
+    log_path = WIKI_DIR / "_log.md"
+    if not log_path.exists():
+        return {"entries": []}
+
+    content = log_path.read_text(encoding="utf-8")
+    entries: list[dict] = []
+    for block in content.split("## [")[1:]:
+        lines = block.strip().split("\n")
+        if not lines:
+            continue
+        header = lines[0]
+        try:
+            ts_part, rest = header.split("] ", 1)
+            action, title = rest.split(" | ", 1) if " | " in rest else (rest, "")
+        except Exception:
+            continue
+        summary = lines[1].strip() if len(lines) > 1 else ""
+        entries.append(
+            {
+                "timestamp": ts_part.strip(),
+                "action": action.strip(),
+                "title": title.strip(),
+                "summary": summary,
+            }
+        )
+    return {"entries": entries[:25]}
+
+
+# ── Stats endpoint ────────────────────────────────────────────────────────────
+
+@app.get("/api/stats")
+async def stats_endpoint() -> dict:
+    """Return dashboard summary statistics."""
+    docs = list_documents()
+    wiki_pages = 0
+    wiki_categories: set[str] = set()
+    if WIKI_DIR.exists():
+        for f in WIKI_DIR.rglob("*.md"):
+            if not f.name.startswith("_"):
+                wiki_pages += 1
+                parts = str(f.relative_to(WIKI_DIR)).replace("\\", "/").split("/")
+                if len(parts) > 1:
+                    wiki_categories.add(parts[0])
+    return {
+        "total_docs": len(docs),
+        "wiki_pages": wiki_pages,
+        "wiki_categories": len(wiki_categories),
+    }
+
+
+# ── Static files / SPA ───────────────────────────────────────────────────────
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

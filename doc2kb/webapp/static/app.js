@@ -1,6 +1,21 @@
-/* doc2kb frontend */
+/* doc2kb PKB — frontend */
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
+// ── Navigation ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const view = btn.dataset.view;
+    document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`view-${view}`).classList.add('active');
+    // Lazy-load per view
+    if (view === 'home')   { loadStats(); loadActivity(); }
+    if (view === 'wiki')   loadWikiTree();
+    if (view === 'docs')   loadDocuments();
+  });
+});
+
+// ── Ingest tabs ───────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const group = tab.closest('.card');
@@ -11,24 +26,22 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// ── Drop zone ─────────────────────────────────────────────────────────────────
-const dropZone = document.getElementById('drop-zone');
+// ── File drop zone ────────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileNameEl = document.getElementById('file-name');
 
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) fileNameEl.textContent = fileInput.files[0].name;
 });
-
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  const dt = e.dataTransfer;
-  if (dt.files.length) {
-    fileInput.files = dt.files;
-    fileNameEl.textContent = dt.files[0].name;
+  if (e.dataTransfer.files.length) {
+    fileInput.files = e.dataTransfer.files;
+    fileNameEl.textContent = e.dataTransfer.files[0].name;
   }
 });
 
@@ -55,6 +68,53 @@ function typeBadge(type) {
   return `<span class="type-badge type-${type}">${type}</span>`;
 }
 
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Stats & activity ──────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res  = await fetch('/api/stats');
+    const data = await res.json();
+    document.getElementById('stat-docs').textContent  = `${data.total_docs} docs`;
+    document.getElementById('stat-pages').textContent = `${data.wiki_pages} wiki pages`;
+    document.getElementById('home-docs').textContent  = data.total_docs;
+    document.getElementById('home-wiki').textContent  = data.wiki_pages;
+    document.getElementById('home-cats').textContent  = data.wiki_categories;
+  } catch { /* ignore */ }
+}
+
+async function loadActivity() {
+  const el = document.getElementById('activity-log');
+  try {
+    const res  = await fetch('/api/wiki/log');
+    const data = await res.json();
+
+    if (!data.entries.length) {
+      el.innerHTML = '<div class="empty">No activity yet. Ingest some documents to get started.</div>';
+      return;
+    }
+    el.innerHTML = data.entries.map(e => `
+      <div class="activity-entry">
+        <div class="activity-icon ${escHtml(e.action)}">
+          ${e.action === 'ingest' ? '⬆️' : '🔍'}
+        </div>
+        <div>
+          <div class="activity-meta">${escHtml(e.timestamp)} · ${escHtml(e.action)}</div>
+          <div class="activity-title">${escHtml(e.title)}</div>
+          ${e.summary ? `<div class="activity-summary">${escHtml(e.summary)}</div>` : ''}
+        </div>
+      </div>`).join('');
+  } catch {
+    el.innerHTML = '<div class="empty" style="color:var(--red)">Failed to load activity.</div>';
+  }
+}
+
 // ── Ingest URL ────────────────────────────────────────────────────────────────
 async function ingestUrl() {
   const url = document.getElementById('url-input').value.trim();
@@ -68,7 +128,7 @@ async function ingestUrl() {
   setStatus('url-status', '<span class="spinner"></span> Fetching and ingesting…', 'info show');
 
   try {
-    const res = await fetch('/api/ingest/url', {
+    const res  = await fetch('/api/ingest/url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, force, langs }),
@@ -77,11 +137,15 @@ async function ingestUrl() {
     if (!res.ok) throw new Error(data.detail || res.statusText);
 
     if (data.status === 'skipped') {
-      setStatus('url-status', `⚠️ Already indexed — use "Force" to re-ingest.`, 'info');
+      setStatus('url-status', '⚠️ Already indexed — use "Force re-ingest" to update.', 'info');
     } else {
-      setStatus('url-status', `✅ Ingested <strong>${data.title}</strong> — ${data.chunks} chunk(s)`, 'ok');
+      const wiki = data.wiki_pages ? ` · ${data.wiki_pages} wiki page(s) created` : '';
+      setStatus('url-status',
+        `✅ Ingested <strong>${escHtml(data.title)}</strong> — ${data.chunks} chunk(s)${wiki}`,
+        'ok');
     }
-    loadDocuments();
+    loadStats();
+    loadActivity();
   } catch (err) {
     setStatus('url-status', `❌ ${err.message}`, 'err');
   } finally {
@@ -89,7 +153,7 @@ async function ingestUrl() {
   }
 }
 
-// ── Ingest File ───────────────────────────────────────────────────────────────
+// ── Ingest file ───────────────────────────────────────────────────────────────
 async function ingestFile() {
   if (!fileInput.files.length) return setStatus('file-status', 'Please select a file.', 'err');
 
@@ -106,16 +170,20 @@ async function ingestFile() {
   setStatus('file-status', '<span class="spinner"></span> Uploading and ingesting…', 'info show');
 
   try {
-    const res = await fetch('/api/ingest/file', { method: 'POST', body: fd });
+    const res  = await fetch('/api/ingest/file', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || res.statusText);
 
     if (data.status === 'skipped') {
-      setStatus('file-status', `⚠️ Already indexed — use "Force" to re-ingest.`, 'info');
+      setStatus('file-status', '⚠️ Already indexed — use "Force re-ingest".', 'info');
     } else {
-      setStatus('file-status', `✅ Ingested <strong>${data.title}</strong> — ${data.chunks} chunk(s)`, 'ok');
+      const wiki = data.wiki_pages ? ` · ${data.wiki_pages} wiki page(s) created` : '';
+      setStatus('file-status',
+        `✅ Ingested <strong>${escHtml(data.title)}</strong> — ${data.chunks} chunk(s)${wiki}`,
+        'ok');
     }
-    loadDocuments();
+    loadStats();
+    loadActivity();
   } catch (err) {
     setStatus('file-status', `❌ ${err.message}`, 'err');
   } finally {
@@ -125,38 +193,35 @@ async function ingestFile() {
   }
 }
 
-// ── Ingest Directory ──────────────────────────────────────────────────────────
-const dirInput = document.getElementById('dir-input');
+// ── Ingest directory ──────────────────────────────────────────────────────────
+const dirInput     = document.getElementById('dir-input');
 const dirFolderName = document.getElementById('dir-folder-name');
-const dirBtn = document.getElementById('dir-btn');
+const dirBtn       = document.getElementById('dir-btn');
 
 const SUPPORTED_EXTS = new Set([
-  '.pdf','.docx','.doc','.pptx','.ppt',
-  '.txt','.md','.html','.htm',
-  '.jpg','.jpeg','.png','.tiff','.tif','.bmp','.gif','.webp',
+  '.pdf', '.docx', '.doc', '.pptx', '.ppt',
+  '.txt', '.md', '.html', '.htm',
+  '.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif', '.webp',
 ]);
 
 dirInput.addEventListener('change', () => {
-  const files = [...dirInput.files].filter(f => {
-    const ext = '.' + f.name.split('.').pop().toLowerCase();
-    return SUPPORTED_EXTS.has(ext);
-  });
+  const files = [...dirInput.files].filter(f =>
+    SUPPORTED_EXTS.has('.' + f.name.split('.').pop().toLowerCase())
+  );
   if (files.length) {
-    // Derive folder name from the first file's relative path
     const folderName = dirInput.files[0].webkitRelativePath.split('/')[0];
     dirFolderName.textContent = `📁 ${folderName} — ${files.length} supported file(s)`;
     dirBtn.disabled = false;
   } else {
-    dirFolderName.textContent = 'No supported files found in this folder.';
+    dirFolderName.textContent = 'No supported files found.';
     dirBtn.disabled = true;
   }
 });
 
 async function ingestDir() {
-  const allFiles = [...dirInput.files].filter(f => {
-    const ext = '.' + f.name.split('.').pop().toLowerCase();
-    return SUPPORTED_EXTS.has(ext);
-  });
+  const allFiles = [...dirInput.files].filter(f =>
+    SUPPORTED_EXTS.has('.' + f.name.split('.').pop().toLowerCase())
+  );
   if (!allFiles.length) return setStatus('dir-status', 'Please select a folder first.', 'err');
 
   const langs = document.getElementById('dir-langs').value
@@ -165,7 +230,6 @@ async function ingestDir() {
 
   setLoading('dir-btn', true);
   document.getElementById('dir-results').innerHTML = '';
-
   let ok = 0, skipped = 0, errors = 0;
   const rows = [];
 
@@ -182,7 +246,7 @@ async function ingestDir() {
     fd.append('langs', langs);
 
     try {
-      const res = await fetch('/api/ingest/file', { method: 'POST', body: fd });
+      const res  = await fetch('/api/ingest/file', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
 
@@ -191,7 +255,8 @@ async function ingestDir() {
         rows.push({ path: relPath, icon: '⏭️', detail: 'already indexed' });
       } else {
         ok++;
-        rows.push({ path: relPath, icon: '✅', detail: `${data.chunks} chunks` });
+        const wiki = data.wiki_pages ? `, ${data.wiki_pages} wiki pages` : '';
+        rows.push({ path: relPath, icon: '✅', detail: `${data.chunks} chunks${wiki}` });
       }
     } catch (err) {
       errors++;
@@ -219,19 +284,139 @@ async function ingestDir() {
   dirInput.value = '';
   dirBtn.disabled = true;
   setLoading('dir-btn', false);
-  loadDocuments();
+  loadStats();
+  loadActivity();
 }
 
-// ── Search ────────────────────────────────────────────────────────────────────
+// ── Wiki ──────────────────────────────────────────────────────────────────────
+async function loadWikiTree() {
+  const treeEl = document.getElementById('wiki-tree');
+  try {
+    const res  = await fetch('/api/wiki/pages');
+    const data = await res.json();
+    const pages = data.pages || [];
+
+    if (!pages.length) {
+      treeEl.innerHTML = `<div class="empty" style="padding:20px 14px;font-size:12px;">
+        No wiki pages yet.<br>Ingest documents to build the wiki.</div>`;
+      return;
+    }
+
+    const meta    = pages.filter(p => p.is_meta);
+    const regular = pages.filter(p => !p.is_meta);
+    const cats    = {};
+    regular.forEach(p => (cats[p.category] || (cats[p.category] = [])).push(p));
+
+    const catIcon = { entities: '👤', concepts: '💡', _root: '📄' };
+    let html = '';
+
+    if (meta.length) {
+      html += `<div class="wiki-tree-category">📋 Meta</div>`;
+      meta.forEach(p => {
+        html += `<div class="wiki-tree-item wiki-tree-meta"
+                      data-path="${escHtml(p.path)}"
+                      onclick="loadWikiPage('${escHtml(p.path)}')">${escHtml(p.name)}.md</div>`;
+      });
+    }
+
+    Object.entries(cats).sort().forEach(([cat, catPages]) => {
+      const icon = catIcon[cat] || '📁';
+      html += `<div class="wiki-tree-category">
+                 ${icon} ${escHtml(cat)}
+                 <span style="color:var(--border)">(${catPages.length})</span>
+               </div>`;
+      catPages.forEach(p => {
+        html += `<div class="wiki-tree-item"
+                      data-path="${escHtml(p.path)}"
+                      onclick="loadWikiPage('${escHtml(p.path)}')">${escHtml(p.name)}</div>`;
+      });
+    });
+
+    treeEl.innerHTML = html;
+  } catch {
+    treeEl.innerHTML = `<div class="empty" style="padding:20px 14px;color:var(--red)">
+      Failed to load wiki.</div>`;
+  }
+}
+
+async function loadWikiPage(path) {
+  // Highlight active item
+  document.querySelectorAll('.wiki-tree-item').forEach(el => el.classList.remove('active'));
+  const active = document.querySelector(`.wiki-tree-item[data-path="${path}"]`);
+  if (active) active.classList.add('active');
+
+  document.getElementById('wiki-page-path').textContent = path;
+  document.getElementById('wiki-page-body').innerHTML =
+    '<div class="empty"><span class="spinner"></span> Loading…</div>';
+  document.getElementById('wiki-answer-area').style.display = 'none';
+
+  try {
+    const res  = await fetch(`/api/wiki/page?path=${encodeURIComponent(path)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    document.getElementById('wiki-page-body').innerHTML = marked.parse(data.content);
+  } catch (err) {
+    document.getElementById('wiki-page-body').innerHTML =
+      `<div class="empty" style="color:var(--red)">Error: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function queryWiki() {
+  const question = document.getElementById('wiki-query-input').value.trim();
+  if (!question) return;
+
+  const answerArea  = document.getElementById('wiki-answer-area');
+  const wikiAskBtn  = document.getElementById('wiki-ask-btn');
+  answerArea.style.display = 'block';
+  answerArea.innerHTML = `
+    <div class="wiki-answer">
+      <div class="wiki-answer-question">💬 ${escHtml(question)}</div>
+      <div><span class="spinner"></span> Thinking…</div>
+    </div>`;
+  wikiAskBtn.disabled = true;
+
+  try {
+    const res  = await fetch('/api/wiki/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+
+    const consulted = (data.pages_consulted || []).length
+      ? `<div class="wiki-answer-meta">Pages consulted: ${
+          data.pages_consulted.map(p => `<code>${escHtml(p)}</code>`).join(', ')
+        }</div>`
+      : '';
+
+    answerArea.innerHTML = `
+      <div class="wiki-answer">
+        <div class="wiki-answer-question">💬 ${escHtml(question)}</div>
+        <div class="wiki-answer-body">${marked.parse(data.answer)}</div>
+        ${consulted}
+      </div>`;
+
+    document.getElementById('wiki-query-input').value = '';
+    loadActivity();
+  } catch (err) {
+    answerArea.innerHTML =
+      `<div class="wiki-answer" style="color:var(--red)">❌ ${escHtml(err.message)}</div>`;
+  } finally {
+    wikiAskBtn.disabled = false;
+  }
+}
+
+// ── Semantic search ───────────────────────────────────────────────────────────
 async function search() {
   const q = document.getElementById('query-input').value.trim();
   if (!q) return;
-  const n = document.getElementById('query-n').value || 5;
+  const n  = document.getElementById('query-n').value || 5;
   const el = document.getElementById('results');
   el.innerHTML = '<div class="empty"><span class="spinner"></span> Searching…</div>';
 
   try {
-    const res = await fetch(`/api/query?q=${encodeURIComponent(q)}&n=${n}`);
+    const res  = await fetch(`/api/query?q=${encodeURIComponent(q)}&n=${n}`);
     const hits = await res.json();
     if (!res.ok) throw new Error(hits.detail || res.statusText);
 
@@ -249,10 +434,9 @@ async function search() {
         <div class="result-title">${escHtml(h.title)}</div>
         <div class="result-source">${escHtml(h.source)}</div>
         <div class="result-snippet">${escHtml(h.text.slice(0, 400))}${h.text.length > 400 ? '…' : ''}</div>
-      </div>
-    `).join('');
+      </div>`).join('');
   } catch (err) {
-    el.innerHTML = `<div class="empty" style="color:var(--red);">Error: ${err.message}</div>`;
+    el.innerHTML = `<div class="empty" style="color:var(--red)">Error: ${err.message}</div>`;
   }
 }
 
@@ -260,42 +444,33 @@ async function search() {
 async function loadDocuments() {
   const el = document.getElementById('doc-list');
   try {
-    const res = await fetch('/api/documents');
+    const res  = await fetch('/api/documents');
     const docs = await res.json();
-
-    document.getElementById('doc-count').textContent =
-      `${docs.length} document${docs.length !== 1 ? 's' : ''}`;
 
     if (!docs.length) {
       el.innerHTML = '<div class="empty">No documents yet.</div>';
       return;
     }
-
     el.innerHTML = `
       <table class="doc-table">
         <thead>
-          <tr>
-            <th>Type</th>
-            <th>Title</th>
-            <th>Source</th>
-            <th>ID</th>
-            <th></th>
-          </tr>
+          <tr><th>Type</th><th>Title</th><th>Source</th><th>ID</th><th></th></tr>
         </thead>
         <tbody>
           ${docs.map(d => `
             <tr>
               <td>${typeBadge(d.type)}</td>
               <td>${escHtml(d.title)}</td>
-              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(d.source)}">${escHtml(d.source)}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                  title="${escHtml(d.source)}">${escHtml(d.source)}</td>
               <td class="doc-id-cell">${escHtml(d.doc_id)}</td>
-              <td><button class="del-btn" onclick="deleteDoc('${escHtml(d.doc_id)}','${escHtml(d.title)}')">Delete</button></td>
-            </tr>
-          `).join('')}
+              <td><button class="del-btn"
+                    onclick="deleteDoc('${escHtml(d.doc_id)}','${escHtml(d.title)}')">Delete</button></td>
+            </tr>`).join('')}
         </tbody>
       </table>`;
   } catch {
-    el.innerHTML = '<div class="empty" style="color:var(--red);">Failed to load documents.</div>';
+    el.innerHTML = '<div class="empty" style="color:var(--red)">Failed to load documents.</div>';
   }
 }
 
@@ -305,6 +480,7 @@ async function deleteDoc(docId, title) {
     const res = await fetch(`/api/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error((await res.json()).detail);
     loadDocuments();
+    loadStats();
   } catch (err) {
     alert(`Error: ${err.message}`);
   }
@@ -314,20 +490,12 @@ async function deleteDoc(docId, title) {
 async function rebuildIndex() {
   try {
     await fetch('/api/index', { method: 'POST' });
-    alert('_INDEX.md regenerated in Obsidian vault.');
+    alert('_INDEX.md regenerated in the Obsidian vault.');
   } catch {
     alert('Failed to rebuild index.');
   }
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 // ── Init ──────────────────────────────────────────────────────────────────────
-loadDocuments();
+loadStats();
+loadActivity();
