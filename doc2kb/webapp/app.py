@@ -34,6 +34,7 @@ def _do_ingest(
     force: bool,
     langs: list[str],
     display_name: str | None = None,
+    description: str | None = None,
 ) -> dict:
     doc_id = _doc_id_for(source)
     if not force and doc_exists(doc_id):
@@ -57,7 +58,7 @@ def _do_ingest(
     wiki_pages: list[dict] = []
     try:
         from ..wiki_writer import synthesize_wiki_update  # noqa: PLC0415
-        wiki_pages = synthesize_wiki_update(content, metadata)
+        wiki_pages = synthesize_wiki_update(content, metadata, description=description)
     except Exception:
         pass
 
@@ -80,8 +81,9 @@ async def ingest_url_endpoint(body: dict) -> dict:
         raise HTTPException(400, "Missing 'url' field")
     force: bool = body.get("force", False)
     langs: list[str] = body.get("langs", ["en"])
+    description: str = body.get("description", "").strip()
     try:
-        return _do_ingest(url, force, langs)
+        return _do_ingest(url, force, langs, description=description or None)
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
 
@@ -91,6 +93,7 @@ async def ingest_file_endpoint(
     file: Annotated[UploadFile, File()],
     force: Annotated[bool, Form()] = False,
     langs: Annotated[str, Form()] = "en",
+    description: Annotated[str, Form()] = "",
 ) -> dict:
     lang_list = [l.strip() for l in langs.split(",") if l.strip()]
     suffix = Path(file.filename or "upload").suffix
@@ -98,7 +101,11 @@ async def ingest_file_endpoint(
         shutil.copyfileobj(file.file, tmp)
         tmp_path = tmp.name
     try:
-        return _do_ingest(tmp_path, force, lang_list, display_name=file.filename)
+        return _do_ingest(
+            tmp_path, force, lang_list,
+            display_name=file.filename,
+            description=description.strip() or None,
+        )
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
     finally:

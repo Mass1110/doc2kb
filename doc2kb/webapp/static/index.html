@@ -96,6 +96,8 @@
         <div class="tab-panel active" id="tab-url">
           <label>URL to ingest</label>
           <input type="url" id="url-input" placeholder="https://example.com/article" />
+          <label>Short description <span style="color:var(--border)">(optional — added to the wiki)</span></label>
+          <textarea id="url-desc" rows="2" placeholder="e.g. Anthropic's paper on constitutional AI, useful for safety research"></textarea>
           <label>OCR Languages (comma-separated, e.g. it,en)</label>
           <input type="text" id="url-langs" value="en" placeholder="en" />
           <label class="check-label">
@@ -109,6 +111,7 @@
         <!-- Directory tab -->
         <div class="tab-panel" id="tab-dir">
           <label>Select a folder to ingest</label>
+
           <div class="drop-zone" id="dir-drop-zone"
                onclick="document.getElementById('dir-input').click()">
             <input type="file" id="dir-input" webkitdirectory multiple
@@ -118,6 +121,8 @@
             <p>Click to choose a folder</p>
             <div class="file-name" id="dir-folder-name"></div>
           </div>
+          <label>Short description <span style="color:var(--border)">(optional — added to the wiki for each file)</span></label>
+          <textarea id="dir-desc" rows="2" placeholder="e.g. Research papers on LLM alignment collected in 2025"></textarea>
           <label>OCR Languages (comma-separated, e.g. it,en)</label>
           <input type="text" id="dir-langs" value="en" placeholder="en" />
           <label class="check-label">
@@ -140,6 +145,8 @@
             <p>PDF, DOCX, PPTX, TXT, HTML, images</p>
             <div class="file-name" id="file-name"></div>
           </div>
+          <label>Short description <span style="color:var(--border)">(optional — added to the wiki)</span></label>
+          <textarea id="file-desc" rows="2" placeholder="e.g. Meeting notes from the product review on 2025-06-01"></textarea>
           <label>OCR Languages (for images, comma-separated)</label>
           <input type="text" id="file-langs" value="en" placeholder="en" />
           <label class="check-label">

@@ -123,6 +123,7 @@ async function ingestUrl() {
   const langs = document.getElementById('url-langs').value
     .split(',').map(s => s.trim()).filter(Boolean);
   const force = document.getElementById('url-force').checked;
+  const description = document.getElementById('url-desc').value.trim();
 
   setLoading('url-btn', true);
   setStatus('url-status', '<span class="spinner"></span> Fetching and ingesting…', 'info show');
@@ -131,7 +132,7 @@ async function ingestUrl() {
     const res  = await fetch('/api/ingest/url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, force, langs }),
+      body: JSON.stringify({ url, force, langs, description }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || res.statusText);
@@ -150,6 +151,7 @@ async function ingestUrl() {
     setStatus('url-status', `❌ ${err.message}`, 'err');
   } finally {
     setLoading('url-btn', false);
+    document.getElementById('url-desc').value = '';
   }
 }
 
@@ -160,11 +162,13 @@ async function ingestFile() {
   const langs = document.getElementById('file-langs').value
     .split(',').map(s => s.trim()).filter(Boolean).join(',') || 'en';
   const force = document.getElementById('file-force').checked;
+  const description = document.getElementById('file-desc').value.trim();
 
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
   fd.append('force', force);
   fd.append('langs', langs);
+  if (description) fd.append('description', description);
 
   setLoading('file-btn', true);
   setStatus('file-status', '<span class="spinner"></span> Uploading and ingesting…', 'info show');
@@ -190,6 +194,7 @@ async function ingestFile() {
     setLoading('file-btn', false);
     fileNameEl.textContent = '';
     fileInput.value = '';
+    document.getElementById('file-desc').value = '';
   }
 }
 
@@ -227,6 +232,7 @@ async function ingestDir() {
   const langs = document.getElementById('dir-langs').value
     .split(',').map(s => s.trim()).filter(Boolean).join(',') || 'en';
   const force = document.getElementById('dir-force').checked;
+  const description = document.getElementById('dir-desc').value.trim();
 
   setLoading('dir-btn', true);
   document.getElementById('dir-results').innerHTML = '';
@@ -244,6 +250,7 @@ async function ingestDir() {
     fd.append('file', file, file.name);
     fd.append('force', force);
     fd.append('langs', langs);
+    if (description) fd.append('description', description);
 
     try {
       const res  = await fetch('/api/ingest/file', { method: 'POST', body: fd });
@@ -283,6 +290,7 @@ async function ingestDir() {
   dirFolderName.textContent = '';
   dirInput.value = '';
   dirBtn.disabled = true;
+  document.getElementById('dir-desc').value = '';
   setLoading('dir-btn', false);
   loadStats();
   loadActivity();

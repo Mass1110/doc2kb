@@ -113,7 +113,11 @@ def _append_log(
 
 # ── Core synthesis ────────────────────────────────────────────────────────────
 
-def synthesize_wiki_update(content: str, metadata: dict) -> list[dict]:
+def synthesize_wiki_update(
+    content: str,
+    metadata: dict,
+    description: str | None = None,
+) -> list[dict]:
     """Call Claude to extract entities/concepts and write wiki pages.
 
     Returns a list of ``{"path", "title", "action"}`` dicts for each page
@@ -136,12 +140,15 @@ def synthesize_wiki_update(content: str, metadata: dict) -> list[dict]:
     existing = _get_existing_pages()
     content_excerpt = content[:4000] + ("\n\n[... content truncated ...]" if len(content) > 4000 else "")
 
+    desc_line = f"- User note: {description}" if description else ""
+
     prompt = f"""You are maintaining a personal knowledge base wiki. A new document has been ingested.
 
 DOCUMENT:
 - Title: {metadata.get("title", "Unknown")}
 - Type:  {metadata.get("type", "unknown")}
 - Source: {metadata.get("source", "unknown")}
+{desc_line}
 
 CONTENT:
 {content_excerpt}
